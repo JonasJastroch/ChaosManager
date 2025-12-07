@@ -6,10 +6,8 @@ from pathlib import Path
 import threading
 import datetime
 import time
-import requests  # <--- ADDED
-import webbrowser  # <--- ADDED
-
-# Import from your second file
+import requests
+import webbrowser
 from backend import get_all_files_list, query_llama_for_categories, query_llama_for_chunk
 
 
@@ -20,7 +18,7 @@ class ChaosManagerApp:
         self.root.geometry("1100x750")
         self.root.configure(bg="#1e1e2e")
 
-        # --- Translations / Übersetzungen ---
+        # --- Translations ---
         self.translations = {
             "title_header": {"Deutsch": "Unordnung ➜ Ordnung", "English": "Chaos ➜ Order"},
             "lbl_lang": {"Deutsch": "Sprache:", "English": "Language:"},
@@ -75,7 +73,7 @@ class ChaosManagerApp:
         self.style.configure("Execute.TButton", background=self.button_bg, foreground="#ffffff", borderwidth=0,
                              font=("Segoe UI", 11, "bold"))
 
-        # --- Variablen ---
+        # --- Variables ---
         self.selected_folder = tk.StringVar()
         self.current_lang = tk.StringVar(value="Deutsch")
         self.preview_data = []
@@ -87,21 +85,16 @@ class ChaosManagerApp:
         self.create_widgets()
         self.update_ui_language()
 
-        # --- STARTUP CHECK ---
-        # Checks if Ollama is running 1 second after app launch
         self.root.after(1000, self.check_ollama_status)
 
     def check_ollama_status(self):
-        """Checks if Ollama is running on localhost."""
         try:
-            # Simple ping to localhost:11434
             requests.get("http://localhost:11434", timeout=0.5)
             self.log("System Check: Ollama found. Ready.", "success")
         except requests.exceptions.ConnectionError:
             self.show_ollama_missing_dialog()
 
     def show_ollama_missing_dialog(self):
-        """Shows the popup instructions."""
         dialog = tk.Toplevel(self.root)
         dialog.title("⚠️ AI Engine Missing")
         dialog.geometry("500x380")
@@ -116,7 +109,6 @@ class ChaosManagerApp:
                "You need to install 'Ollama' to continue.")
         ttk.Label(dialog, text=msg, justify="center", background="#1e1e2e", foreground="#cdd6f4").pack(pady=5)
 
-        # Step 1: Download
         step1_frame = ttk.Frame(dialog)
         step1_frame.pack(pady=10, fill="x", padx=20)
         ttk.Label(step1_frame, text="1. Download Ollama:", width=20, font=("Segoe UI", 10, "bold")).pack(side="left")
@@ -125,7 +117,6 @@ class ChaosManagerApp:
                             command=lambda: webbrowser.open("https://ollama.com/download"))
         btn_dl.pack(side="left", padx=10)
 
-        # Step 2: Command
         step2_frame = ttk.Frame(dialog)
         step2_frame.pack(pady=10, fill="x", padx=20)
         ttk.Label(step2_frame, text="2. Run Command:", width=20, font=("Segoe UI", 10, "bold")).pack(side="left")
@@ -134,11 +125,9 @@ class ChaosManagerApp:
         cmd_entry.insert(0, "ollama pull llama3:8b")
         cmd_entry.pack(side="left", fill="x", expand=True, padx=5)
 
-        # Info text
         ttk.Label(dialog, text="(Copy the command and paste it into PowerShell/CMD)",
                   background="#1e1e2e", foreground="#6c7086", font=("Segoe UI", 9)).pack(pady=0)
 
-        # Retry button
         ttk.Button(dialog, text="I have installed it! (Retry)",
                    command=lambda: [dialog.destroy(), self.check_ollama_status()]).pack(side="bottom", pady=20)
 

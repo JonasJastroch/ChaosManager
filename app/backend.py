@@ -1,13 +1,9 @@
 import requests
-import json
 from pathlib import Path
-import os
 
-# --- Configuration ---
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3:8b"
 
-# --- PROMPT TEMPLATES ---
 PROMPTS = {
     "DE": {
         "arch_sys": (
@@ -57,19 +53,13 @@ PROMPTS = {
 
 
 def get_all_files_list(base_path):
-    """Returns a list of all relative file paths (recursive), ignoring specific system folders."""
     base_path = Path(base_path)
     file_list = []
 
-    # Dateiendungen, die ignoriert werden sollen (temp files etc.)
-    # WICHTIG: .lnk und .url sind HIER NICHT enthalten, sie werden also sortiert!
     IGNORED_SUFFIXES = ['.vpp.bak', '.bak', '.tmp', '.ds_store', '.ini']
-
-    # Ordner, die komplett ignoriert werden
     IGNORED_FOLDERS = ['$RECYCLE.BIN', 'System Volume Information', '.git', '.idea']
 
     for item in base_path.rglob('*'):
-        # Check ob der Pfad einen ignorierten Ordner enthält
         if any(ignored in str(item) for ignored in IGNORED_FOLDERS):
             continue
 
@@ -82,8 +72,6 @@ def get_all_files_list(base_path):
 
 
 def query_llama_for_categories(all_files, user_prompt, language="DE"):
-    """PHASE 1: THE ARCHITECT"""
-    # Wir geben dem Architekten mehr Dateien (bis zu 800), damit er Muster besser erkennt
     sample_files = all_files[:800]
     files_str = "\n".join(sample_files)
 
@@ -110,17 +98,15 @@ def query_llama_for_categories(all_files, user_prompt, language="DE"):
         response = requests.post(OLLAMA_API_URL, json=data, timeout=120)
         response.raise_for_status()
         raw_text = response.json().get('response', '').strip()
-        # Bereinigung der KI-Antwort
         raw_text = raw_text.replace('[', '').replace(']', '').replace('\n', ',').replace('.', '')
         categories = [cat.strip() for cat in raw_text.split(',') if cat.strip()]
 
-        # Fallback: Sicherstellen, dass es einen Ordner für "Restmüll" und "System" gibt
         fallback_cat = "Sonstiges" if language == "Deutsch" else "Misc"
         system_cat = "System"
 
         if fallback_cat not in categories:
             categories.append(fallback_cat)
-        # Wenn kein passender System-Ordner da ist, fügen wir ihn hinzu
+
         if system_cat not in categories and "Anwendungen" not in categories and "Apps" not in categories:
             categories.append(system_cat)
 
@@ -131,7 +117,6 @@ def query_llama_for_categories(all_files, user_prompt, language="DE"):
 
 
 def query_llama_for_chunk(file_chunk, user_prompt, defined_categories, language="DE"):
-    """PHASE 2: THE WORKER"""
     files_str = "\n".join(file_chunk)
     lang_key = "DE" if language == "Deutsch" else "EN"
     p = PROMPTS[lang_key]
@@ -156,7 +141,6 @@ def query_llama_for_chunk(file_chunk, user_prompt, defined_categories, language=
         "prompt": prompt,
         "system": p["worker_sys"],
         "stream": False,
-        # Temp 0.0 zwingt die KI, exakt den Anweisungen zu folgen ohne Kreativität
         "options": {"temperature": 0.0, "num_predict": 1024}
     }
 
