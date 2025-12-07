@@ -10,29 +10,69 @@ MODEL_NAME = "llama3:8b"
 # --- PROMPT TEMPLATES ---
 PROMPTS = {
     "DE": {
-        "arch_sys": "Du bist ein erfahrener Informationsarchitekt. Deine Aufgabe ist es, eine Liste von Dateinamen zu analysieren und eine saubere Ordnerstruktur zu erstellen. Erstelle logische Kategorien in DEUTSCHER SPRACHE (z.B. 'Dokumente', 'Finanzen', 'Bilder'). Gib NUR die Liste der Ordnernamen aus, getrennt durch Kommas.",
-        "arch_user": "Definiere basierend auf den Dateien die perfekte Ordnerstruktur in DEUTSCH.\nAusgabe NUR die Ordnernamen getrennt durch Kommas:",
-        "worker_sys": "Du bist ein Datei-Sortier-Roboter. Du musst jede Datei einem der vorgegebenen Zielordner zuweisen.",
-        "worker_constraint": "--- ERLAUBTE ZIELORDNER ---\nDu darfst NUR Ordner aus dieser Liste verwenden: [{cat_str}].\nErfinde keine neuen Namen.",
+        "arch_sys": (
+            "Du bist ein strikter Informationsarchitekt. Dein Ziel: Reduziere Chaos durch wenige, große Ordner.\n"
+            "REGELN:\n"
+            "1. Fasse Verknüpfungen (.lnk, .url) und ausführbare Dateien (.exe) IMMER in einem Ordner namens 'Anwendungen' oder 'System' zusammen.\n"
+            "2. Erstelle NIEMALS einen Ordner für nur 1-2 Dateien.\n"
+            "3. Nutze breite Kategorien: Statt 'Rechnungen', 'Verträge', 'Briefe' nutze einfach 'Dokumente'.\n"
+            "4. Nutze 'Bilder' für alle Fotos, Screenshots und Grafiken.\n"
+            "5. Erstelle maximal 8 Kategorien.\n"
+            "Gib NUR die Liste der Ordnernamen aus, getrennt durch Kommas."
+        ),
+        "arch_user": "Analysiere diese Dateien und definiere max. 8 breite Kategorien in DEUTSCH.\nAusgabe NUR die Ordnernamen (Kommagetrennt):",
+
+        "worker_sys": "Du bist ein Sortier-Roboter. Ordne Dateien den vorgegebenen Kategorien zu.",
+        "worker_constraint": (
+            "--- ERLAUBTE KATEGORIEN ---\n"
+            "Du darfst NUR in diese Ordner sortieren: [{cat_str}].\n"
+            "REGEL: Alle .lnk, .url und .exe Dateien gehören in den Ordner 'Anwendungen' oder 'System' (je nachdem was in der Liste ist).\n"
+            "Erfinde KEINE neuen Namen."
+        ),
         "worker_user": "CRITICAL: Output a sorting line for EVERY file listed. Format: [File] -> [Folder]"
     },
     "EN": {
-        "arch_sys": "You are an experienced information architect. Your task is to analyze a list of filenames and create a clean folder structure. Create logical categories in ENGLISH (e.g., 'Documents', 'Finance', 'Images'). Output ONLY the list of folder names, separated by commas.",
-        "arch_user": "Define the perfect folder structure in ENGLISH based on the files.\nOutput ONLY the folder names separated by commas:",
-        "worker_sys": "You are a file sorting robot. You must assign every single file to one of the provided destination folders.",
-        "worker_constraint": "--- ALLOWED DESTINATION FOLDERS ---\nYou must ONLY use folders from this list: [{cat_str}].\nDo not invent new folder names.",
+        "arch_sys": (
+            "You are a strict information architect. Your goal: Reduce chaos using few, broad folders.\n"
+            "RULES:\n"
+            "1. ALWAYS group shortcuts (.lnk, .url) and executables (.exe) into a folder named 'Apps' or 'System'.\n"
+            "2. NEVER create a folder for just 1-2 files.\n"
+            "3. Use broad categories: Instead of 'Invoices', 'Letters', use just 'Documents'.\n"
+            "4. Use 'Images' for all photos, screenshots, and graphics.\n"
+            "5. Create a maximum of 8 categories.\n"
+            "Output ONLY the list of folder names, separated by commas."
+        ),
+        "arch_user": "Analyze these files and define max 8 broad categories in ENGLISH.\nOutput ONLY folder names (comma separated):",
+
+        "worker_sys": "You are a sorting robot. Assign files to the provided categories.",
+        "worker_constraint": (
+            "--- ALLOWED CATEGORIES ---\n"
+            "You must ONLY sort into these folders: [{cat_str}].\n"
+            "RULE: All .lnk, .url, and .exe files go into 'Apps' or 'System' (whichever exists in the list).\n"
+            "Do NOT invent new names."
+        ),
         "worker_user": "CRITICAL: Output a sorting line for EVERY file listed. Format: [File] -> [Folder]"
     }
 }
 
 
 def get_all_files_list(base_path):
-    """Returns a list of all relative file paths (recursive)."""
+    """Returns a list of all relative file paths (recursive), ignoring specific system folders."""
     base_path = Path(base_path)
     file_list = []
+
+    # Dateiendungen, die ignoriert werden sollen (temp files etc.)
+    # WICHTIG: .lnk und .url sind HIER NICHT enthalten, sie werden also sortiert!
     IGNORED_SUFFIXES = ['.vpp.bak', '.bak', '.tmp', '.ds_store', '.ini']
 
+    # Ordner, die komplett ignoriert werden
+    IGNORED_FOLDERS = ['$RECYCLE.BIN', 'System Volume Information', '.git', '.idea']
+
     for item in base_path.rglob('*'):
+        # Check ob der Pfad einen ignorierten Ordner enthält
+        if any(ignored in str(item) for ignored in IGNORED_FOLDERS):
+            continue
+
         if item.is_file() and not item.name.startswith('.'):
             is_ignored_type = item.suffix.lower() in IGNORED_SUFFIXES
             if not is_ignored_type:
@@ -42,17 +82,13 @@ def get_all_files_list(base_path):
 
 
 def query_llama_for_categories(all_files, user_prompt, language="DE"):
-    """
-    PHASE 1: THE ARCHITECT
-    """
-    sample_files = all_files[:500]
+    """PHASE 1: THE ARCHITECT"""
+    # Wir geben dem Architekten mehr Dateien (bis zu 800), damit er Muster besser erkennt
+    sample_files = all_files[:800]
     files_str = "\n".join(sample_files)
 
-    # Wähle die Prompts basierend auf der Sprache
     lang_key = "DE" if language == "Deutsch" else "EN"
     p = PROMPTS[lang_key]
-
-    system_prompt = p["arch_sys"]
 
     prompt = (
         f"--- FILE LIST (SAMPLE) ---\n"
@@ -62,22 +98,32 @@ def query_llama_for_categories(all_files, user_prompt, language="DE"):
         f"{p['arch_user']}"
     )
 
-    print(f"DEBUG: Asking Architect ({lang_key}) for Global Folder Structure...")
-
     data = {
         "model": MODEL_NAME,
         "prompt": prompt,
-        "system": system_prompt,
+        "system": p["arch_sys"],
         "stream": False,
-        "options": {"temperature": 0.2, "num_predict": 256}
+        "options": {"temperature": 0.1, "num_predict": 256}
     }
 
     try:
         response = requests.post(OLLAMA_API_URL, json=data, timeout=120)
         response.raise_for_status()
         raw_text = response.json().get('response', '').strip()
-        raw_text = raw_text.replace('[', '').replace(']', '').replace('\n', ',')
+        # Bereinigung der KI-Antwort
+        raw_text = raw_text.replace('[', '').replace(']', '').replace('\n', ',').replace('.', '')
         categories = [cat.strip() for cat in raw_text.split(',') if cat.strip()]
+
+        # Fallback: Sicherstellen, dass es einen Ordner für "Restmüll" und "System" gibt
+        fallback_cat = "Sonstiges" if language == "Deutsch" else "Misc"
+        system_cat = "System"
+
+        if fallback_cat not in categories:
+            categories.append(fallback_cat)
+        # Wenn kein passender System-Ordner da ist, fügen wir ihn hinzu
+        if system_cat not in categories and "Anwendungen" not in categories and "Apps" not in categories:
+            categories.append(system_cat)
+
         return categories
     except Exception as e:
         print(f"Architect Error: {e}")
@@ -85,21 +131,16 @@ def query_llama_for_categories(all_files, user_prompt, language="DE"):
 
 
 def query_llama_for_chunk(file_chunk, user_prompt, defined_categories, language="DE"):
-    """
-    PHASE 2: THE WORKER
-    """
+    """PHASE 2: THE WORKER"""
     files_str = "\n".join(file_chunk)
     lang_key = "DE" if language == "Deutsch" else "EN"
     p = PROMPTS[lang_key]
 
     if defined_categories:
         cat_str = ", ".join(defined_categories)
-        # Formatiere den Constraint-String mit den Kategorien
         constraint = p["worker_constraint"].format(cat_str=cat_str)
     else:
         constraint = ""
-
-    system_prompt = p["worker_sys"]
 
     prompt = (
         f"--- FILES TO SORT ---\n"
@@ -113,9 +154,10 @@ def query_llama_for_chunk(file_chunk, user_prompt, defined_categories, language=
     data = {
         "model": MODEL_NAME,
         "prompt": prompt,
-        "system": system_prompt,
+        "system": p["worker_sys"],
         "stream": False,
-        "options": {"temperature": 0.1, "num_predict": 1024}
+        # Temp 0.0 zwingt die KI, exakt den Anweisungen zu folgen ohne Kreativität
+        "options": {"temperature": 0.0, "num_predict": 1024}
     }
 
     try:

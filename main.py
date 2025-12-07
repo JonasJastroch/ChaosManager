@@ -6,16 +6,44 @@ from pathlib import Path
 import threading
 import datetime
 import time
-# Import des LLaMA-Sortierers
+# Import des LLaMA-Sortierers (Assuming these exist based on context)
 from llama_sorter import get_all_files_list, query_llama_for_categories, query_llama_for_chunk
 
 
 class ChaosManagerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Chaos Manager - MiniHackathon 3.0 (LLaMA) - Clean Edition")
+        self.root.title("Chaos Manager - MiniHackathon 3.0")
         self.root.geometry("1100x750")
         self.root.configure(bg="#1e1e2e")
+
+        # --- Translations / Übersetzungen ---
+        self.translations = {
+            "title_header": {"Deutsch": "Unordnung ➜ Ordnung", "English": "Chaos ➜ Order"},
+            "lbl_lang": {"Deutsch": "Sprache:", "English": "Language:"},
+            "frame_select": {"Deutsch": " 1. Chaos-Ordner wählen ", "English": " 1. Select Chaos Folder "},
+            "btn_browse": {"Deutsch": "Ordner öffnen...", "English": "Open Folder..."},
+            "frame_prompt": {"Deutsch": " 2. KI-Prompt (Anweisung) ", "English": " 2. AI Prompt (Instruction) "},
+            "frame_action": {"Deutsch": " 3. Aktionen & Status ", "English": " 3. Actions & Status "},
+            "btn_analyze": {"Deutsch": "🔍 Analyse Starten", "English": "🔍 Start Analysis"},
+            "btn_execute": {"Deutsch": "🚀 AUFRÄUMEN STARTEN", "English": "🚀 START CLEANUP"},
+            "frame_log": {"Deutsch": " Protokoll ", "English": " Log "},
+            "status_ready": {"Deutsch": "Bereit für Analyse...", "English": "Ready for analysis..."},
+            "status_calculating": {"Deutsch": "Berechne Zeit...", "English": "Calculating time..."},
+            "status_init": {"Deutsch": "Initialisiere KI...", "English": "Initializing AI..."},
+            "status_phase1": {"Deutsch": "Phase 1: Architekt plant Struktur...",
+                              "English": "Phase 1: Architect planning structure..."},
+            "status_phase2": {"Deutsch": "Phase 2: Verarbeite Batch", "English": "Phase 2: Processing batch"},
+            "status_done": {"Deutsch": "Analyse abgeschlossen.", "English": "Analysis complete."},
+            "status_moving": {"Deutsch": "Verschiebe Dateien...", "English": "Moving files..."},
+            "status_cleaning": {"Deutsch": "Bereinige leere Ordner...", "English": "Cleaning empty folders..."},
+            "status_finished": {"Deutsch": "Vorgang abgeschlossen!", "English": "Process complete!"},
+            "prompt_default": {"Deutsch": "Erstelle eine saubere, professionelle Ordnerstruktur.",
+                               "English": "Create a clean, professional folder structure. Separate Work, Personal, University, and System files logically."},
+            "msg_error_path": {"Deutsch": "Ungültiger Pfad!", "English": "Invalid path!"},
+            "msg_confirm_title": {"Deutsch": "Starten?", "English": "Start?"},
+            "msg_confirm_body": {"Deutsch": "Dateien verschieben?", "English": "Move files?"}
+        }
 
         # --- Styles & Design ---
         self.style = ttk.Style()
@@ -57,13 +85,7 @@ class ChaosManagerApp:
 
         # --- Variablen ---
         self.selected_folder = tk.StringVar()
-        self.default_prompt = "Erstelle eine saubere, professionelle Ordnerstruktur. Trenne Arbeit, Privates, Studium und Systemdateien logisch voneinander."
         self.current_lang = tk.StringVar(value="Deutsch")
-
-        self.prompts = {
-            "Deutsch": self.default_prompt,
-            "English": "Create a clean, professional folder structure. Separate Work, Personal, University, and System files logically."
-        }
 
         self.preview_data = []
         self.entry_prompt = None
@@ -75,63 +97,75 @@ class ChaosManagerApp:
         self.pulsing = False
 
         self.create_widgets()
+        # Initiale Texte setzen
+        self.update_ui_language()
+
+    def get_text(self, key):
+        lang = self.current_lang.get()
+        return self.translations.get(key, {}).get(lang, "MISSING_TEXT")
 
     def create_widgets(self):
         # Header
         header_frame = ttk.Frame(self.root)
         header_frame.pack(fill="x", padx=20, pady=20)
 
-        lbl_title = ttk.Label(header_frame, text="Unordnung ➜ Ordnung", style="Header.TLabel")
-        lbl_title.pack(side="left")
+        self.lbl_title = ttk.Label(header_frame, text="", style="Header.TLabel")
+        self.lbl_title.pack(side="left")
 
         # Sprachauswahl
         lang_frame = ttk.Frame(header_frame)
         lang_frame.pack(side="right")
-        ttk.Label(lang_frame, text="Sprache:").pack(side="left", padx=(0, 5))
+        self.lbl_lang = ttk.Label(lang_frame, text="Sprache:")
+        self.lbl_lang.pack(side="left", padx=(0, 5))
+
         combo_lang = ttk.Combobox(lang_frame, textvariable=self.current_lang, values=["Deutsch", "English"],
                                   state="readonly", width=10)
         combo_lang.pack(side="left")
-        combo_lang.bind("<<ComboboxSelected>>", self.update_prompt_language)
+        combo_lang.bind("<<ComboboxSelected>>", self.on_language_change)
 
         # Auswahlbereich
-        select_frame = ttk.Labelframe(self.root, text=" 1. Chaos-Quelle wählen ", padding=15)
-        select_frame.pack(fill="x", padx=20, pady=10)
-        self.entry_path = tk.Entry(select_frame, textvariable=self.selected_folder, bg="#313244", fg="#ffffff",
+        self.select_frame = ttk.Labelframe(self.root, text="", padding=15)
+        self.select_frame.pack(fill="x", padx=20, pady=10)
+
+        self.entry_path = tk.Entry(self.select_frame, textvariable=self.selected_folder, bg="#313244", fg="#ffffff",
                                    insertbackground="white", relief="flat", font=("Consolas", 10))
         self.entry_path.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        btn_browse = ttk.Button(select_frame, text="Ordner öffnen...", command=self.browse_folder)
-        btn_browse.pack(side="right")
+
+        self.btn_browse = ttk.Button(self.select_frame, text="", command=self.browse_folder)
+        self.btn_browse.pack(side="right")
 
         # KI-Befehl
-        prompt_frame = ttk.Labelframe(self.root, text=" 2. KI-Befehl ", padding=15)
-        prompt_frame.pack(fill="x", padx=20, pady=10)
-        self.entry_prompt = tk.Text(prompt_frame, bg="#313244", fg="#ffffff", insertbackground="white", relief="flat",
+        self.prompt_frame = ttk.Labelframe(self.root, text="", padding=15)
+        self.prompt_frame.pack(fill="x", padx=20, pady=10)
+
+        self.entry_prompt = tk.Text(self.prompt_frame, bg="#313244", fg="#ffffff", insertbackground="white",
+                                    relief="flat",
                                     font=("Consolas", 10), height=3, wrap="word")
-        self.entry_prompt.insert("1.0", self.prompts["Deutsch"])
+        self.entry_prompt.insert("1.0", self.get_text("prompt_default"))
         self.entry_prompt.pack(fill="x", pady=5)
 
-        # --- AKTIONEN BEREICH (Vereinfacht) ---
-        action_frame = ttk.Labelframe(self.root, text=" 3. Aktionen & Status ", padding=15)
-        action_frame.pack(fill="x", padx=20, pady=10)
+        # --- AKTIONEN BEREICH ---
+        self.action_frame = ttk.Labelframe(self.root, text="", padding=15)
+        self.action_frame.pack(fill="x", padx=20, pady=10)
 
         # Buttons Reihe
-        btn_box = ttk.Frame(action_frame)
+        btn_box = ttk.Frame(self.action_frame)
         btn_box.pack(fill="x", pady=(0, 10))
 
         # Analyse Button
-        btn_analyze = ttk.Button(btn_box, text="🔍 Analyse Starten", command=self.run_analysis, style="Action.TButton")
-        btn_analyze.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.btn_analyze = ttk.Button(btn_box, text="", command=self.run_analysis, style="Action.TButton")
+        self.btn_analyze.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
         # Execute Button (Pulsierend)
-        self.btn_execute = ttk.Button(btn_box, text="🚀 AUFRÄUMEN STARTEN", command=self.run_cleanup, state="disabled",
+        self.btn_execute = ttk.Button(btn_box, text="", command=self.run_cleanup, state="disabled",
                                       style="Execute.TButton")
         self.btn_execute.pack(side="left", fill="x", expand=True)
 
         # Progress Info
-        progress_box = ttk.Frame(action_frame)
+        progress_box = ttk.Frame(self.action_frame)
         progress_box.pack(fill="x")
 
-        self.lbl_progress_text = ttk.Label(progress_box, text="Bereit für Analyse...", font=("Consolas", 9))
+        self.lbl_progress_text = ttk.Label(progress_box, text="", font=("Consolas", 9))
         self.lbl_progress_text.pack(anchor="w", pady=(0, 2))
 
         self.progress_bar = ttk.Progressbar(progress_box, orient="horizontal", mode="determinate",
@@ -139,11 +173,12 @@ class ChaosManagerApp:
         self.progress_bar.pack(fill="x")
 
         # --- LOG BEREICH ---
-        log_frame = ttk.Labelframe(self.root, text=" Protokoll ", padding=15)
-        log_frame.pack(fill="both", expand=True, padx=20, pady=10)
-        self.log_text = tk.Text(log_frame, bg="#181825", fg="#a6adc8", font=("Consolas", 10), relief="flat",
+        self.log_frame = ttk.Labelframe(self.root, text="", padding=15)
+        self.log_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        self.log_text = tk.Text(self.log_frame, bg="#181825", fg="#a6adc8", font=("Consolas", 10), relief="flat",
                                 state="disabled")
-        scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
+        scroll = ttk.Scrollbar(self.log_frame, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
         self.log_text.pack(side="left", fill="both", expand=True)
@@ -170,13 +205,31 @@ class ChaosManagerApp:
         self.style.configure("Execute.TButton", background=current_color)
         self.root.after(800, lambda: self._animate_pulse(step + 1))
 
-    # --- Standard Funktionen ---
-    def update_prompt_language(self, event=None):
-        lang = self.current_lang.get()
-        new_prompt = self.prompts.get(lang, self.prompts["Deutsch"])
+    # --- Sprachumschaltung & UI Updates ---
+    def on_language_change(self, event=None):
+        self.update_ui_language()
+        # Prompt aktualisieren (falls er noch Standard ist oder Nutzer das wünscht)
+        new_prompt = self.get_text("prompt_default")
         self.entry_prompt.delete("1.0", tk.END)
         self.entry_prompt.insert("1.0", new_prompt)
-        self.log(f"Sprache geändert auf: {lang}", "info")
+        lang = self.current_lang.get()
+        self.log(f"Sprache geändert auf: {lang}" if lang == "Deutsch" else f"Language changed to: {lang}", "info")
+
+    def update_ui_language(self):
+        """Aktualisiert alle sichtbaren UI-Elemente basierend auf der aktuellen Sprache"""
+        self.lbl_title.config(text=self.get_text("title_header"))
+        self.lbl_lang.config(text=self.get_text("lbl_lang"))
+        self.select_frame.config(text=self.get_text("frame_select"))
+        self.btn_browse.config(text=self.get_text("btn_browse"))
+        self.prompt_frame.config(text=self.get_text("frame_prompt"))
+        self.action_frame.config(text=self.get_text("frame_action"))
+        self.btn_analyze.config(text=self.get_text("btn_analyze"))
+        self.btn_execute.config(text=self.get_text("btn_execute"))
+        self.log_frame.config(text=self.get_text("frame_log"))
+
+        # Reset progress text wenn nichts läuft
+        if self.progress_bar['value'] == 0:
+            self.lbl_progress_text.config(text=self.get_text("status_ready"))
 
     def log(self, message, tag="info"):
         self.log_text.config(state="normal")
@@ -189,7 +242,9 @@ class ChaosManagerApp:
         f = filedialog.askdirectory()
         if f:
             self.selected_folder.set(f)
-            self.log(f"Ordner ausgewählt: {f}", "info")
+            lang = self.current_lang.get()
+            msg = f"Ordner ausgewählt: {f}" if lang == "Deutsch" else f"Folder selected: {f}"
+            self.log(msg, "info")
 
     def update_progress_ui(self, current_step, total_steps, start_time):
         if total_steps == 0: return
@@ -218,8 +273,7 @@ class ChaosManagerApp:
             else:
                 status_text = f"Progress: {int(percent)}% | Remaining: ~{time_str}"
         else:
-            lang = self.current_lang.get()
-            status_text = "Berechne Zeit..." if lang == "Deutsch" else "Calculating time..."
+            status_text = self.get_text("status_calculating")
 
         self.lbl_progress_text.config(text=status_text)
 
@@ -233,20 +287,21 @@ class ChaosManagerApp:
     def run_analysis(self):
         path = self.selected_folder.get()
         if not path or not os.path.isdir(path):
-            messagebox.showerror("Fehler", "Ungültiger Pfad!")
+            messagebox.showerror("Fehler", self.get_text("msg_error_path"))
             return
 
         self.stop_pulse_effect()
         user_prompt = self.entry_prompt.get("1.0", "end-1c").strip()
         lang = self.current_lang.get()
 
-        self.log(f"--- Starte Analyse ({lang}) ---", "info")
+        msg_start = "--- Starte Analyse ---" if lang == "Deutsch" else "--- Starting Analysis ---"
+        self.log(msg_start, "info")
+
         self.preview_data = []
         self.btn_execute.config(state="disabled")
         self.progress_bar['value'] = 0
 
-        loading_text = "Initialisiere KI..." if lang == "Deutsch" else "Initializing AI..."
-        self.lbl_progress_text.config(text=loading_text)
+        self.lbl_progress_text.config(text=self.get_text("status_init"))
 
         threading.Thread(target=self._batch_analyze_thread, args=(path, user_prompt, lang), daemon=True).start()
 
@@ -258,22 +313,26 @@ class ChaosManagerApp:
         total_files = len(all_files)
 
         if total_files == 0:
-            self.root.after(0, lambda: self.log("Keine sortierbaren Dateien gefunden.", "warning"))
+            msg = "Keine sortierbaren Dateien gefunden." if language == "Deutsch" else "No sortable files found."
+            self.root.after(0, lambda: self.log(msg, "warning"))
             self.root.after(0, self.reset_progress_ui)
             return
 
-        self.root.after(0, lambda: self.log(f"Phase 1: Architekt analysiert {total_files} Dateien...", "arch"))
+        msg_arch = f"Phase 1: Architekt analysiert {total_files} Dateien..." if language == "Deutsch" else f"Phase 1: Architect analyzing {total_files} files..."
+        self.root.after(0, lambda: self.log(msg_arch, "arch"))
 
-        phase1_text = "Phase 1: Architekt plant Struktur..." if language == "Deutsch" else "Phase 1: Architect planning structure..."
+        phase1_text = self.get_text("status_phase1")
         self.root.after(0, lambda: self.lbl_progress_text.config(text=phase1_text))
         self.root.after(0, lambda: self.progress_bar.configure(maximum=total_files + 10, value=0))
 
         master_categories = query_llama_for_categories(all_files, user_prompt, language)
         if not master_categories:
-            master_categories = ["Dokumente", "Bilder", "Medien"]
+            master_categories = ["Dokumente", "Bilder", "Medien"] if language == "Deutsch" else ["Documents", "Images",
+                                                                                                 "Media"]
 
         cat_str = ", ".join(master_categories)
-        self.root.after(0, lambda c=cat_str: self.log(f"Architekt Plan: [{c}]", "arch"))
+        msg_plan = f"Architekt Plan: [{cat_str}]" if language == "Deutsch" else f"Architect Plan: [{cat_str}]"
+        self.root.after(0, lambda: self.log(msg_plan, "arch"))
 
         BATCH_SIZE = 25
         chunks = [all_files[i:i + BATCH_SIZE] for i in range(0, total_files, BATCH_SIZE)]
@@ -283,13 +342,16 @@ class ChaosManagerApp:
         processed_files_set = set()
         phase2_start_time = time.time()
 
+        status_p2_base = self.get_text("status_phase2")
+
         for i, chunk in enumerate(chunks):
             self.root.after(0,
                             lambda curr=i, tot=total_chunks, start=phase2_start_time: self.update_progress_ui(curr, tot,
                                                                                                               start))
             current_batch_size = len(chunk)
-            self.root.after(0, lambda idx=i + 1, t=total_chunks, s=current_batch_size: self.log(
-                f"Phase 2: Verarbeite Batch {idx}/{t} ({s} Dateien)...", "info"))
+
+            msg_batch = f"{status_p2_base} {i + 1}/{total_chunks} ({current_batch_size} files)..."
+            self.root.after(0, lambda m=msg_batch: self.log(m, "info"))
 
             response = query_llama_for_chunk(chunk, user_prompt, master_categories, language)
 
@@ -321,7 +383,8 @@ class ChaosManagerApp:
                         pass
 
         self.root.after(0, lambda: self.update_progress_ui(total_chunks, total_chunks, phase2_start_time))
-        done_text = "Analyse abgeschlossen." if language == "Deutsch" else "Analysis complete."
+
+        done_text = self.get_text("status_done")
         self.root.after(0, lambda: self.lbl_progress_text.config(text=done_text))
 
         self.preview_data = proposed_moves
@@ -331,10 +394,11 @@ class ChaosManagerApp:
         missing_files = all_files_set - processed_files_set
 
         if len(missing_files) == 0:
-            self.root.after(0, lambda: self.log(f"✅ PERFEKT: Alle {total_files} Dateien wurden zugeordnet!", "success"))
+            msg_perfect = f"✅ PERFEKT: Alle {total_files} Dateien wurden zugeordnet!" if language == "Deutsch" else f"✅ PERFECT: All {total_files} files assigned!"
+            self.root.after(0, lambda: self.log(msg_perfect, "success"))
         else:
-            self.root.after(0, lambda: self.log(f"⚠️ {len(missing_files)} Dateien konnten nicht zugeordnet werden:",
-                                                "warning"))
+            msg_miss = f"⚠️ {len(missing_files)} Dateien konnten nicht zugeordnet werden:" if language == "Deutsch" else f"⚠️ {len(missing_files)} files could not be assigned:"
+            self.root.after(0, lambda: self.log(msg_miss, "warning"))
             for mf in list(missing_files)[:5]:
                 self.root.after(0, lambda m=mf: self.log(f"   - {m}", "warning"))
 
@@ -348,17 +412,21 @@ class ChaosManagerApp:
         self.progress_bar.pack_forget()
         self.progress_bar.pack(fill="x")
 
-        # --- Cleanup ---
-
+    # --- Cleanup ---
     def run_cleanup(self):
         if not self.preview_data: return
         lang = self.current_lang.get()
-        msg = f"{len(self.preview_data)} Dateien verschieben?" if lang == "Deutsch" else f"Move {len(self.preview_data)} files?"
-        if not messagebox.askyesno("Starten?", msg): return
+
+        msg_title = self.get_text("msg_confirm_title")
+        msg_body_base = self.get_text("msg_confirm_body")
+        msg_body = f"{len(self.preview_data)} {msg_body_base}"
+
+        if not messagebox.askyesno(msg_title, msg_body): return
 
         self.stop_pulse_effect()
 
-        self.log("--- Starte Verschiebung ---", "info")
+        log_start = "--- Starte Verschiebung ---" if lang == "Deutsch" else "--- Starting Move ---"
+        self.log(log_start, "info")
         self.btn_execute.config(state="disabled")
         threading.Thread(target=self._cleanup_thread, daemon=True).start()
 
@@ -368,8 +436,7 @@ class ChaosManagerApp:
         start_time = time.time()
 
         lang = self.current_lang.get()
-        text = "Verschiebe Dateien..." if lang == "Deutsch" else "Moving files..."
-        self.root.after(0, lambda: self.lbl_progress_text.config(text=text))
+        self.root.after(0, lambda: self.lbl_progress_text.config(text=self.get_text("status_moving")))
 
         for i, item in enumerate(self.preview_data):
             try:
@@ -390,16 +457,22 @@ class ChaosManagerApp:
 
         self.remove_empty_folders(self.selected_folder.get())
         self.root.after(0, lambda: self.log("-" * 30, "info"))
-        self.root.after(0, lambda: self.log(f"FERTIG! {moved} Dateien verschoben.", "success"))
+
+        msg_fin = f"FERTIG! {moved} Dateien verschoben." if lang == "Deutsch" else f"DONE! {moved} files moved."
+        self.root.after(0, lambda: self.log(msg_fin, "success"))
         self.root.after(0, lambda: self.progress_bar.configure(value=100))
 
-        done = "Vorgang abgeschlossen!" if lang == "Deutsch" else "Process complete!"
-        self.root.after(0, lambda: self.lbl_progress_text.config(text=done))
+        self.root.after(0, lambda: self.lbl_progress_text.config(text=self.get_text("status_finished")))
         self.preview_data = []
+
+        # NEU: Ordner öffnen
+        msg_open = "Öffne Ordner..." if lang == "Deutsch" else "Opening folder..."
+        self.root.after(0, lambda: self.log(msg_open, "info"))
+        self.root.after(0, self.open_file_explorer)
 
     def remove_empty_folders(self, path):
         lang = self.current_lang.get()
-        text = "Bereinige leere Ordner..." if lang == "Deutsch" else "Cleaning empty folders..."
+        text = self.get_text("status_cleaning")
         self.root.after(0, lambda: self.lbl_progress_text.config(text=text))
 
         deleted_count = 0
@@ -412,7 +485,17 @@ class ChaosManagerApp:
                     deleted_count += 1
                 except OSError:
                     pass
-        self.root.after(0, lambda: self.log(f"Bereinigung: {deleted_count} leere Ordner entfernt.", "success"))
+
+        msg_clean = f"Bereinigung: {deleted_count} leere Ordner entfernt." if lang == "Deutsch" else f"Cleanup: {deleted_count} empty folders removed."
+        self.root.after(0, lambda: self.log(msg_clean, "success"))
+
+    def open_file_explorer(self):
+        """Öffnet den Explorer im sortierten Ordner."""
+        path = self.selected_folder.get()
+        try:
+            os.startfile(path)
+        except Exception:
+            pass  # Silent fail auf nicht-Windows Systemen, oder Log wenn gewünscht
 
 
 if __name__ == "__main__":
