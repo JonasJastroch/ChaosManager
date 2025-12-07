@@ -10,7 +10,7 @@ import requests  # <--- ADDED
 import webbrowser  # <--- ADDED
 
 # Import from your second file
-from llama_sorter import get_all_files_list, query_llama_for_categories, query_llama_for_chunk
+from backend import get_all_files_list, query_llama_for_categories, query_llama_for_chunk
 
 
 class ChaosManagerApp:
