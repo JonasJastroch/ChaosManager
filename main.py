@@ -13,7 +13,7 @@ class ChaosManagerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Chaos Manager - MiniHackathon 3.0 (LLaMA) - Backup Edition")
-        self.root.geometry("1100x700")  # Etwas breiter für die neuen Buttons
+        self.root.geometry("1100x700")
         self.root.configure(bg="#1e1e2e")
 
         # --- Styles ---
@@ -27,26 +27,28 @@ class ChaosManagerApp:
 
         style.configure("TLabel", background=bg_color, foreground=fg_color, font=("Segoe UI", 11))
         style.configure("Header.TLabel", background=bg_color, foreground=accent_color, font=("Segoe UI", 20, "bold"))
-        style.configure("TButton", background=button_bg, foreground="#ffffff", borderwidth=0, font=("Segoe UI", 10))
+        style.configure("TButton", background=button_color, foreground="#ffffff", borderwidth=0, font=("Segoe UI", 10))
         style.map("TButton", background=[('active', accent_color)])
         style.configure("TFrame", background=bg_color)
         style.configure("TLabelframe", background=bg_color, foreground=fg_color)
         style.configure("TLabelframe.Label", background=bg_color, foreground=accent_color)
 
-        # Style für Checkbutton
         style.configure("TCheckbutton", background=bg_color, foreground=fg_color)
 
         # --- Variablen ---
         self.selected_folder = tk.StringVar()
-        self.default_prompt = "Analysiere die Dateitypen und vorhandenen Ordner in der Liste. Gruppiere ähnliche Dateien (z.B. nach Thema, Projekt oder Typ) in neue, logische Ordner (z.B. 'Entwicklung', 'Finanzen', 'Studium', 'Bilder'). Gib mir die Sortiervorschläge ausschließlich in der geforderten Listenform."
-        self.llama_prompt = tk.StringVar(value=self.default_prompt)
+        # NEU: Wir benötigen KEINE StringVar für den Prompt mehr, da wir Text verwenden.
+        self.default_prompt = "DU MUSST JEDE EINZELNE DATEI im Ordner, ohne Ausnahme, in einen neuen, passenden TOP-LEVEL Ordner (z.B. 'Dokumente', 'Projekte', 'Finanzen') verschieben. Finde für jede Datei eine sinnvolle Kategorie. Gib alle Vorschläge ausschließlich in der geforderten Listenform zurück."
         self.log_text = None
         self.preview_data = []
 
         # Variablen für Backup/Restore
         self.backup_path = None
-        self.should_backup = tk.BooleanVar(value=True)  # Checkbox-Zustand: Standardmäßig an
+        self.should_backup = tk.BooleanVar(value=True)
         self.btn_restore = None
+
+        # Text Widget Referenz
+        self.entry_prompt = None
 
         # Progress Bar
         self.progress_bar = None
@@ -77,15 +79,17 @@ class ChaosManagerApp:
         btn_browse = ttk.Button(select_frame, text="Ordner öffnen...", command=self.browse_folder)
         btn_browse.pack(side="right")
 
-        # LLaMA Prompt Area
+        # NEU: LLaMA Prompt Area mit Text-Widget
         prompt_frame = ttk.Labelframe(self.root, text=" 2. KI-Befehl ", padding=15)
         prompt_frame.pack(fill="x", padx=20, pady=10)
 
         lbl_prompt = ttk.Label(prompt_frame, text="Sortier-Befehl für die KI:")
         lbl_prompt.pack(fill="x")
 
-        self.entry_prompt = tk.Entry(prompt_frame, textvariable=self.llama_prompt, bg="#313244", fg="#ffffff",
-                                     insertbackground="white", relief="flat", font=("Consolas", 10))
+        # NEU: Text Widget für den Prompt
+        self.entry_prompt = tk.Text(prompt_frame, bg="#313244", fg="#ffffff", insertbackground="white",
+                                    relief="flat", font=("Consolas", 10), height=3, wrap="word")
+        self.entry_prompt.insert("1.0", self.default_prompt)  # Default Prompt einfügen
         self.entry_prompt.pack(fill="x", pady=(5, 5))
 
         # Action Area
@@ -153,7 +157,6 @@ class ChaosManagerApp:
             self.log(f"Ordner ausgewählt: {folder}", "info")
             self.btn_execute.config(state="disabled")
 
-            # Prüft, ob ein Backup-Ordner existiert und aktiviert den Restore-Button
             backup_path = Path(folder) / "ChaosManager_Backup"
             if backup_path.is_dir() and any(backup_path.iterdir()):
                 self.btn_restore.config(state="normal")
@@ -174,8 +177,10 @@ class ChaosManagerApp:
             messagebox.showerror("Fehler", "Bitte wähle einen gültigen Ordner aus!")
             return
 
-        user_prompt = self.llama_prompt.get().strip()
-        # Fallback auf den intelligenten Default-Prompt
+        # NEU: Auslesen des Text-Widgets
+        user_prompt = self.entry_prompt.get("1.0", "end-1c").strip()
+
+        # Fallback auf den intelligenten Default-Prompt, falls das Feld leer ist
         if not user_prompt:
             user_prompt = self.default_prompt
 
@@ -254,7 +259,6 @@ class ChaosManagerApp:
                                 })
 
                                 # --- NEUE FORMATIERTE AUSGABE ---
-                                # Füllt den Quellpfad auf 50 Zeichen (für visuelle Ausrichtung)
                                 source_display = relative_source_path[:50].ljust(50)
                                 formatted_message = f"{source_display} -> {dest_folder_name}"
 
@@ -301,6 +305,61 @@ class ChaosManagerApp:
         finally:
             self.root.after(0, self._stop_progress_bar)
 
+    # run_cleanup Methode
+    def run_cleanup(self):
+        if not self.preview_data:
+            return
+
+        answer = messagebox.askyesno("Bestätigung",
+                                     f"Möchtest du wirklich {len(self.preview_data)} Dateien verschieben?\n(Aktion kann nicht einfach rückgängig gemacht werden)")
+        if not answer:
+            return
+
+        # Backup-Prüfung
+        if self.should_backup.get():
+            self.log("Backup wird erstellt...", "info")
+            backup_thread = threading.Thread(target=self.run_backup, daemon=True)
+            backup_thread.start()
+            backup_thread.join()
+            self.btn_restore.config(state="normal")
+
+        self.btn_execute.config(state="disabled")
+        self.log("--- Starte Aufräumvorgang ---", "header")
+
+        threading.Thread(target=self._cleanup_thread, daemon=True).start()
+
+    # _cleanup_thread Methode
+    def _cleanup_thread(self):
+        moved_count = 0
+        errors = 0
+
+        for item in self.preview_data:
+            try:
+                if not os.path.exists(item['dest_folder']):
+                    os.makedirs(item['dest_folder'])
+
+                dest_path = os.path.join(item['dest_folder'], item['file'])
+                base, ext = os.path.splitext(item['file'])
+                counter = 1
+                while os.path.exists(dest_path):
+                    new_name = f"{base}_{counter}{ext}"
+                    dest_path = os.path.join(item['dest_folder'], new_name)
+                    counter += 1
+
+                shutil.move(item['source'], dest_path)
+                moved_count += 1
+
+            except Exception as e:
+                errors += 1
+                self.root.after(0, lambda m=item['file'], err=str(e): self.log(f"Fehler bei {m}: {err}", "error"))
+
+        self.root.after(0, lambda: self.log("-" * 30, "info"))
+        self.root.after(0, lambda: self.log(f"FERTIG! {moved_count} Dateien in Ordnung verwandelt.", "success"))
+        if errors > 0:
+            self.root.after(0, lambda: self.log(f"{errors} Fehler aufgetreten.", "warning"))
+
+        self.preview_data = []
+
     # NEU: Methode zum Kopieren der Dateien (Backup)
     def run_backup(self):
         source_dir = self.selected_folder.get()
@@ -344,62 +403,6 @@ class ChaosManagerApp:
                         lambda: self.log(f"Backup erfolgreich! {copied_count} Dateien in {self.backup_path} gesichert.",
                                          "success"))
         return copied_count
-
-    # run_cleanup Methode
-    def run_cleanup(self):
-        if not self.preview_data:
-            return
-
-        answer = messagebox.askyesno("Bestätigung",
-                                     f"Möchtest du wirklich {len(self.preview_data)} Dateien verschieben?\n(Aktion kann nicht einfach rückgängig gemacht werden)")
-        if not answer:
-            return
-
-        # Backup-Prüfung
-        if self.should_backup.get():
-            self.log("Backup wird erstellt...", "info")
-            # Wir verwenden join(), um sicherzustellen, dass das Backup beendet ist, bevor der Cleanup-Thread startet
-            backup_thread = threading.Thread(target=self.run_backup, daemon=True)
-            backup_thread.start()
-            backup_thread.join()
-            self.btn_restore.config(state="normal")
-
-        self.btn_execute.config(state="disabled")
-        self.log("--- Starte Aufräumvorgang ---", "header")
-
-        threading.Thread(target=self._cleanup_thread, daemon=True).start()
-
-    # _cleanup_thread Methode
-    def _cleanup_thread(self):
-        moved_count = 0
-        errors = 0
-
-        for item in self.preview_data:
-            try:
-                if not os.path.exists(item['dest_folder']):
-                    os.makedirs(item['dest_folder'])
-
-                dest_path = os.path.join(item['dest_folder'], item['file'])
-                base, ext = os.path.splitext(item['file'])
-                counter = 1
-                while os.path.exists(dest_path):
-                    new_name = f"{base}_{counter}{ext}"
-                    dest_path = os.path.join(item['dest_folder'], new_name)
-                    counter += 1
-
-                shutil.move(item['source'], dest_path)
-                moved_count += 1
-
-            except Exception as e:
-                errors += 1
-                self.root.after(0, lambda m=item['file'], err=str(e): self.log(f"Fehler bei {m}: {err}", "error"))
-
-        self.root.after(0, lambda: self.log("-" * 30, "info"))
-        self.root.after(0, lambda: self.log(f"FERTIG! {moved_count} Dateien in Ordnung verwandelt.", "success"))
-        if errors > 0:
-            self.root.after(0, lambda: self.log(f"{errors} Fehler aufgetreten.", "warning"))
-
-        self.preview_data = []
 
     # Methode zum Wiederherstellen der Originalordnung
     def run_restore(self):
