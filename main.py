@@ -12,7 +12,7 @@ from llama_sorter import get_all_files_list, query_llama_for_categories, query_l
 class ChaosManagerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Chaos Manager - MiniHackathon 3.0 (LLaMA) - Ultimate Edition")
+        self.root.title("Chaos Manager - MiniHackathon 3.0 (LLaMA) - International Edition")
         self.root.geometry("1100x750")
         self.root.configure(bg="#1e1e2e")
 
@@ -32,16 +32,21 @@ class ChaosManagerApp:
         style.configure("TLabelframe", background=bg_color, foreground=fg_color)
         style.configure("TLabelframe.Label", background=bg_color, foreground=accent_color)
         style.configure("TCheckbutton", background=bg_color, foreground=fg_color)
+        style.configure("TCombobox", fieldbackground=button_bg, background=button_bg, foreground="black")
 
         self.selected_folder = tk.StringVar()
-        self.default_prompt = "Create a clean, professional folder structure. Separate Work, Personal, and System files."
+
+        # Standard-Prompts für beide Sprachen
+        self.prompts = {
+            "Deutsch": "Erstelle eine saubere, professionelle Ordnerstruktur. Trenne Arbeit, Privates, Studium und Systemdateien logisch voneinander.",
+            "English": "Create a clean, professional folder structure. Separate Work, Personal, University, and System files logically."
+        }
+
+        self.current_lang = tk.StringVar(value="Deutsch")  # Standard Sprache
+
         self.preview_data = []
         self.backup_path = None
-
-        # Checkbox Variablen
         self.should_backup = tk.BooleanVar(value=True)
-        self.should_delete_empty = tk.BooleanVar(value=True)  # NEU: Leere Ordner löschen
-
         self.btn_restore = None
         self.entry_prompt = None
         self.progress_bar = None
@@ -51,9 +56,22 @@ class ChaosManagerApp:
     def create_widgets(self):
         header_frame = ttk.Frame(self.root)
         header_frame.pack(fill="x", padx=20, pady=20)
-        lbl_title = ttk.Label(header_frame, text="Unordnung ➜ Ordnung (Ultimate)", style="Header.TLabel")
+
+        lbl_title = ttk.Label(header_frame, text="Unordnung ➜ Ordnung", style="Header.TLabel")
         lbl_title.pack(side="left")
 
+        # Sprachauswahl (Rechts oben)
+        lang_frame = ttk.Frame(header_frame)
+        lang_frame.pack(side="right")
+        lbl_lang = ttk.Label(lang_frame, text="Sprache / Language:")
+        lbl_lang.pack(side="left", padx=(0, 5))
+
+        combo_lang = ttk.Combobox(lang_frame, textvariable=self.current_lang, values=["Deutsch", "English"],
+                                  state="readonly", width=10)
+        combo_lang.pack(side="left")
+        combo_lang.bind("<<ComboboxSelected>>", self.update_prompt_language)
+
+        # Auswahl
         select_frame = ttk.Labelframe(self.root, text=" 1. Chaos-Quelle wählen ", padding=15)
         select_frame.pack(fill="x", padx=20, pady=10)
         self.entry_path = tk.Entry(select_frame, textvariable=self.selected_folder, bg="#313244", fg="#ffffff",
@@ -62,28 +80,23 @@ class ChaosManagerApp:
         btn_browse = ttk.Button(select_frame, text="Ordner öffnen...", command=self.browse_folder)
         btn_browse.pack(side="right")
 
+        # Prompt
         prompt_frame = ttk.Labelframe(self.root, text=" 2. KI-Befehl ", padding=15)
         prompt_frame.pack(fill="x", padx=20, pady=10)
         self.entry_prompt = tk.Text(prompt_frame, bg="#313244", fg="#ffffff", insertbackground="white", relief="flat",
                                     font=("Consolas", 10), height=3, wrap="word")
-        self.entry_prompt.insert("1.0", self.default_prompt)
+        self.entry_prompt.insert("1.0", self.prompts["Deutsch"])  # Initiale Sprache
         self.entry_prompt.pack(fill="x", pady=5)
 
+        # Aktionen
         action_frame = ttk.Labelframe(self.root, text=" 3. Aktionen ", padding=15)
         action_frame.pack(fill="x", padx=20, pady=10)
 
         options_frame = ttk.Frame(action_frame)
         options_frame.pack(side="left", padx=(0, 20))
-
         chk_backup = ttk.Checkbutton(options_frame, text="Backup erstellen", variable=self.should_backup,
                                      style="TCheckbutton")
         chk_backup.pack(anchor="w")
-
-        # NEU: Checkbox für leere Ordner
-        chk_empty = ttk.Checkbutton(options_frame, text="Leere Quellordner löschen", variable=self.should_delete_empty,
-                                    style="TCheckbutton")
-        chk_empty.pack(anchor="w")
-
         self.btn_restore = ttk.Button(options_frame, text="Wiederherstellen", command=self.run_restore,
                                       state="disabled")
         self.btn_restore.pack(anchor="w", pady=(5, 0))
@@ -95,6 +108,7 @@ class ChaosManagerApp:
 
         self.progress_bar = ttk.Progressbar(action_frame, orient="horizontal", mode="determinate")
 
+        # Log
         log_frame = ttk.Labelframe(self.root, text=" Protokoll ", padding=15)
         log_frame.pack(fill="both", expand=True, padx=20, pady=10)
         self.log_text = tk.Text(log_frame, bg="#181825", fg="#a6adc8", font=("Consolas", 10), relief="flat",
@@ -108,6 +122,15 @@ class ChaosManagerApp:
         self.log_text.tag_config("error", foreground="#f38ba8")
         self.log_text.tag_config("info", foreground="#89b4fa")
         self.log_text.tag_config("arch", foreground="#cba6f7", font=("Consolas", 10, "bold"))
+
+    def update_prompt_language(self, event=None):
+        """Aktualisiert den Text im Prompt-Feld basierend auf der Sprachwahl."""
+        lang = self.current_lang.get()
+        new_prompt = self.prompts.get(lang, self.prompts["Deutsch"])
+
+        self.entry_prompt.delete("1.0", tk.END)
+        self.entry_prompt.insert("1.0", new_prompt)
+        self.log(f"Sprache geändert auf: {lang}", "info")
 
     def log(self, message, tag="info"):
         self.log_text.config(state="normal")
@@ -132,19 +155,19 @@ class ChaosManagerApp:
             return
 
         user_prompt = self.entry_prompt.get("1.0", "end-1c").strip()
-        if not user_prompt: user_prompt = self.default_prompt
+        lang = self.current_lang.get()  # Sprache abrufen
 
-        self.log("--- Starte Analyse ---", "info")
+        self.log(f"--- Starte Analyse ({lang}) ---", "info")
         self.preview_data = []
         self.btn_execute.config(state="disabled")
         self.progress_bar.pack(side="left", fill="x", expand=True, padx=(15, 0))
 
-        threading.Thread(target=self._batch_analyze_thread, args=(path, user_prompt), daemon=True).start()
+        # Sprache an den Thread übergeben
+        threading.Thread(target=self._batch_analyze_thread, args=(path, user_prompt, lang), daemon=True).start()
 
-    def _batch_analyze_thread(self, path, user_prompt):
+    def _batch_analyze_thread(self, path, user_prompt, language):
         base_path = Path(path)
 
-        # 1. Alle Dateien erfassen
         all_files = get_all_files_list(path)
         total_files = len(all_files)
 
@@ -153,33 +176,34 @@ class ChaosManagerApp:
             self.root.after(0, self._stop_progress_bar)
             return
 
-        self.root.after(0, lambda: self.log(f"Phase 1: Der Architekt analysiert {total_files} Dateien...", "arch"))
+        self.root.after(0, lambda: self.log(f"Phase 1: Architekt analysiert {total_files} Dateien...", "arch"))
         self.root.after(0, lambda: self.progress_bar.configure(maximum=total_files + 10, value=0))
 
-        master_categories = query_llama_for_categories(all_files, user_prompt)
+        # PHASE 1: Architekt mit Sprachwahl
+        master_categories = query_llama_for_categories(all_files, user_prompt, language)
 
         if not master_categories:
             self.root.after(0, lambda: self.log("Konnte keine Kategorien ermitteln. Nutze Standard.", "warning"))
-            master_categories = ["Dokumente", "Bilder", "Musik", "Video", "Sonstiges"]
+            master_categories = ["Docs", "Images", "Media"] if language == "English" else ["Dokumente", "Bilder",
+                                                                                           "Medien"]
 
         cat_str = ", ".join(master_categories)
         self.root.after(0, lambda c=cat_str: self.log(f"Architekt Plan: [{c}]", "arch"))
 
-        # 3. PHASE 2: Der Arbeiter
+        # PHASE 2: Worker mit Sprachwahl
         BATCH_SIZE = 25
         chunks = [all_files[i:i + BATCH_SIZE] for i in range(0, total_files, BATCH_SIZE)]
 
         self.root.after(0, lambda: self.progress_bar.configure(maximum=len(chunks), value=0))
         proposed_moves = []
-
-        # Tracking set für processed files (relative Pfade)
         processed_files_set = set()
 
         for i, chunk in enumerate(chunks):
             self.root.after(0, lambda idx=i + 1, t=len(chunks): self.log(f"Phase 2: Verarbeite Batch {idx}/{t}...",
                                                                          "info"))
 
-            response = query_llama_for_chunk(chunk, user_prompt, master_categories)
+            # Hier übergeben wir auch die Sprache
+            response = query_llama_for_chunk(chunk, user_prompt, master_categories, language)
 
             if response.startswith("ERROR"):
                 self.root.after(0, lambda r=response: self.log(r, "error"))
@@ -204,7 +228,6 @@ class ChaosManagerApp:
                                     "category": folder_name,
                                     "dest_folder": str(dest_folder)
                                 })
-                                # Zum Set hinzufügen für späteren Vergleich
                                 processed_files_set.add(rel_source)
 
                                 msg = f"{rel_source[:60].ljust(60)} -> {folder_name}"
@@ -214,15 +237,10 @@ class ChaosManagerApp:
 
             self.root.after(0, lambda val=i + 1: self.progress_bar.configure(value=val))
 
-        # 4. Abschluss & Fehlende Dateien Bericht
         self.preview_data = proposed_moves
         self.root.after(0, lambda: self.log("-" * 30, "info"))
 
-        # Vergleich: Alle Dateien vs. Sortierte Dateien
-        # Wir müssen normalisieren (Strings), um sicher zu sein
         all_files_set = set(all_files)
-        # processed_files_set ist schon gefüllt
-
         missing_files = all_files_set - processed_files_set
 
         if len(missing_files) == 0:
@@ -297,35 +315,28 @@ class ChaosManagerApp:
             except Exception as e:
                 self.root.after(0, lambda e=str(e): self.log(f"Error moving: {e}", "error"))
 
-        self.root.after(0, lambda: self.log(f"FERTIG: {moved} verschoben.", "success"))
+        # Leere Ordner löschen (Standardmäßig)
+        self.remove_empty_folders(self.selected_folder.get())
 
-        # NEU: Leere Ordner löschen
-        if self.should_delete_empty.get():
-            self.remove_empty_folders(self.selected_folder.get())
-
+        self.root.after(0, lambda: self.log("-" * 30, "info"))
+        self.root.after(0, lambda: self.log(f"FERTIG! {moved} Dateien erfolgreich in Ordnung verwandelt.", "success"))
         self.preview_data = []
 
     def remove_empty_folders(self, path):
-        """Löscht rekursiv leere Ordner (von unten nach oben)."""
+        """Löscht rekursiv leere Ordner."""
         deleted_count = 0
-        self.root.after(0, lambda: self.log("Suche nach leeren Ordnern...", "info"))
+        self.root.after(0, lambda: self.log("Bereinige leere Quellordner...", "info"))
 
-        # topdown=False ist wichtig! Erst Kinder löschen, dann Eltern.
         for root, dirs, files in os.walk(path, topdown=False):
             for name in dirs:
                 full_path = os.path.join(root, name)
-                # Ignoriere den Backup-Ordner!
                 if "ChaosManager_Backup" in full_path:
                     continue
-
                 try:
-                    # Versuche zu löschen. Wenn nicht leer, wirft OSError (das ist gut so)
                     os.rmdir(full_path)
                     deleted_count += 1
-                    # self.root.after(0, lambda p=full_path: self.log(f"Gelöscht: {p}", "warning"))
                 except OSError:
-                    pass  # Ordner nicht leer
-
+                    pass
         self.root.after(0, lambda: self.log(f"Bereinigung: {deleted_count} leere Ordner entfernt.", "success"))
 
     def run_restore(self):

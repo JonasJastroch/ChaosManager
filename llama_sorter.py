@@ -7,55 +7,62 @@ import os
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3:8b"
 
+# --- PROMPT TEMPLATES ---
+PROMPTS = {
+    "DE": {
+        "arch_sys": "Du bist ein erfahrener Informationsarchitekt. Deine Aufgabe ist es, eine Liste von Dateinamen zu analysieren und eine saubere Ordnerstruktur zu erstellen. Erstelle logische Kategorien in DEUTSCHER SPRACHE (z.B. 'Dokumente', 'Finanzen', 'Bilder'). Gib NUR die Liste der Ordnernamen aus, getrennt durch Kommas.",
+        "arch_user": "Definiere basierend auf den Dateien die perfekte Ordnerstruktur in DEUTSCH.\nAusgabe NUR die Ordnernamen getrennt durch Kommas:",
+        "worker_sys": "Du bist ein Datei-Sortier-Roboter. Du musst jede Datei einem der vorgegebenen Zielordner zuweisen.",
+        "worker_constraint": "--- ERLAUBTE ZIELORDNER ---\nDu darfst NUR Ordner aus dieser Liste verwenden: [{cat_str}].\nErfinde keine neuen Namen.",
+        "worker_user": "CRITICAL: Output a sorting line for EVERY file listed. Format: [File] -> [Folder]"
+    },
+    "EN": {
+        "arch_sys": "You are an experienced information architect. Your task is to analyze a list of filenames and create a clean folder structure. Create logical categories in ENGLISH (e.g., 'Documents', 'Finance', 'Images'). Output ONLY the list of folder names, separated by commas.",
+        "arch_user": "Define the perfect folder structure in ENGLISH based on the files.\nOutput ONLY the folder names separated by commas:",
+        "worker_sys": "You are a file sorting robot. You must assign every single file to one of the provided destination folders.",
+        "worker_constraint": "--- ALLOWED DESTINATION FOLDERS ---\nYou must ONLY use folders from this list: [{cat_str}].\nDo not invent new folder names.",
+        "worker_user": "CRITICAL: Output a sorting line for EVERY file listed. Format: [File] -> [Folder]"
+    }
+}
+
 
 def get_all_files_list(base_path):
-    """
-    Returns a list of all relative file paths (recursive),
-    filtering out ignored types.
-    """
+    """Returns a list of all relative file paths (recursive)."""
     base_path = Path(base_path)
     file_list = []
-
-    # ÄNDERUNG: .lnk und .url entfernt! Sie werden jetzt mit sortiert.
     IGNORED_SUFFIXES = ['.vpp.bak', '.bak', '.tmp', '.ds_store', '.ini']
 
     for item in base_path.rglob('*'):
-        # Sicherheitscheck: Manchmal haben Ordner Endungen, wir wollen nur Dateien
         if item.is_file() and not item.name.startswith('.'):
             is_ignored_type = item.suffix.lower() in IGNORED_SUFFIXES
             if not is_ignored_type:
-                # Relative path
                 relative_path = str(item.relative_to(base_path))
                 file_list.append(relative_path)
-
     return file_list
 
 
-def query_llama_for_categories(all_files, user_prompt):
+def query_llama_for_categories(all_files, user_prompt, language="DE"):
     """
     PHASE 1: THE ARCHITECT
     """
     sample_files = all_files[:500]
     files_str = "\n".join(sample_files)
 
-    system_prompt = (
-        "You are a senior information architect. Your goal is to analyze a list of filenames "
-        "and create a clean, consistent set of top-level folders that covers ALL file types listed. "
-        "Create broad but logical categories (e.g. 'Documentation', 'Finance', 'Images', 'Code', 'System'). "
-        "Avoid creating too many folders (keep it between 5 and 15). "
-        "Output ONLY the list of folder names, separated by commas. Nothing else."
-    )
+    # Wähle die Prompts basierend auf der Sprache
+    lang_key = "DE" if language == "Deutsch" else "EN"
+    p = PROMPTS[lang_key]
+
+    system_prompt = p["arch_sys"]
 
     prompt = (
-        f"--- FILE LIST SAMPLE ---\n"
+        f"--- FILE LIST (SAMPLE) ---\n"
         f"{files_str}\n\n"
         f"--- USER GOAL ---\n"
         f"{user_prompt}\n\n"
-        f"Based on the files above, define the perfect folder structure.\n"
-        f"Output ONLY the folder names separated by commas (e.g. Folder A, Folder B, Folder C):"
+        f"{p['arch_user']}"
     )
 
-    print("DEBUG: Asking Architect for Global Folder Structure...")
+    print(f"DEBUG: Asking Architect ({lang_key}) for Global Folder Structure...")
 
     data = {
         "model": MODEL_NAME,
@@ -77,27 +84,22 @@ def query_llama_for_categories(all_files, user_prompt):
         return []
 
 
-def query_llama_for_chunk(file_chunk, user_prompt, defined_categories):
+def query_llama_for_chunk(file_chunk, user_prompt, defined_categories, language="DE"):
     """
     PHASE 2: THE WORKER
     """
     files_str = "\n".join(file_chunk)
+    lang_key = "DE" if language == "Deutsch" else "EN"
+    p = PROMPTS[lang_key]
 
     if defined_categories:
         cat_str = ", ".join(defined_categories)
-        constraint = (
-            f"--- ALLOWED DESTINATION FOLDERS ---\n"
-            f"You must ONLY use folders from this list: [{cat_str}].\n"
-            f"Do not invent new folder names. Pick the best fit from the list for each file.\n"
-        )
+        # Formatiere den Constraint-String mit den Kategorien
+        constraint = p["worker_constraint"].format(cat_str=cat_str)
     else:
         constraint = ""
 
-    system_prompt = (
-        "You are a file sorting robot. You must assign every single file to one of the provided destination folders. "
-        "Strictly follow the format: '[FILE_PATH] -> [FOLDER_NAME]'. "
-        "Do not include any intro or outro text."
-    )
+    system_prompt = p["worker_sys"]
 
     prompt = (
         f"--- FILES TO SORT ---\n"
@@ -105,7 +107,7 @@ def query_llama_for_chunk(file_chunk, user_prompt, defined_categories):
         f"{constraint}\n"
         f"--- INSTRUCTION ---\n"
         f"{user_prompt}\n"
-        f"CRITICAL: Output a sorting line for EVERY file listed. Format: [File] -> [Folder]\n"
+        f"{p['worker_user']}\n"
     )
 
     data = {
