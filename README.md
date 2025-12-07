@@ -1,80 +1,84 @@
 # Chaos Manager 📂🧠
 
-### KI-gestützte Dateisortierung für Windows
+### AI-Powered File Sorting for Windows
 
-Der **Chaos Manager** ist ein innovatives Tool, das mithilfe von lokalen Large Language Models (LLaMA/Llama 3) Ihre ungeordneten Downloads, Desktops oder andere Verzeichnisse vollautomatisch in eine saubere, professionelle und logische Ordnerstruktur überführt.
-
----
-
-## 💻 Systemanforderungen
-
-* **Betriebssystem:** Windows 10/11 (Die .exe ist nur für Windows kompiliert.)
-* **KI-Backend:** [Ollama](https://ollama.com/download/windows) (Muss installiert und ausgeführt werden, um die KI-Modelle bereitzustellen.)
+The **Chaos Manager** is an innovative tool that uses local Large Language Models (LLaMA/Llama 3) to automatically analyze your cluttered Downloads, Desktop, or other directories and organize them into a clean, professional, and logical folder structure.
 
 ---
 
-## ⚠️ Wichtige Sicherheitshinweise (Windows Defender)
+There are two ways to start the Chaos Manager: [Jump directly to Installation & Start](#-installation--start).
 
-Da der **Chaos Manager** eine neu erstellte, unsignierte `.exe`-Datei ist, die auf Ihr Dateisystem zugreift, kann der **Windows Defender SmartScreen** beim ersten Start eine Warnung auslösen.
+---
 
-> 🔒 **Meldung:** „Windows hat Ihren PC geschützt“
+## 💻 System Requirements
 
-Dies ist ein **Normalverhalten** für neue Programme, die das Dateisystem bearbeiten. Das Projekt ist Open Source (Quellcode einsehbar) und sicher.
+* **Operating System:** Windows 10/11 (The .exe is compiled for Windows only.)
+* **AI Backend:** [Ollama](https://ollama.com/download/windows) (You must install and run Ollama to provide the AI models.)
 
-### Wie Sie die Warnung umgehen:
+---
 
-1.  Klicken Sie im blauen Warnfenster auf **"Weitere Informationen"**.
-2.  Klicken Sie anschließend auf **"Trotzdem ausführen"**.
+## ⚠️ Important Security Notice (Windows Defender)
+
+Since the **Chaos Manager** is a newly built, unsigned `.exe` file that accesses your file system, **Windows Defender SmartScreen** might show a warning when you first run it.
+
+> 🔒 **Message:** "Windows protected your PC"
+
+This is **normal behavior** for new programs that modify the file system. The project is open source, and the code is secure.
+
+### How to Bypass the Warning:
+
+1.  In the blue warning window, click **"More info"**.
+2.  Then, click **"Run anyway"**.
 
 ---
 
 ## 🚀 Installation & Start
 
-Sie haben zwei Möglichkeiten, den Chaos Manager zu verwenden:
+**Choose ONE of the following methods to start the Chaos Manager.**
 
-### 1. Einfache Nutzung (.exe Binary) – Empfohlen
+### 1. Using Source Code (For Developers & Full Control)
 
-Laden Sie die vorkompilierte ausführbare Datei herunter:
+To run the project directly from the source code and maintain full control, follow these steps:
 
-1.  Gehen Sie zu den **[GitHub Releases](https://github.com/JonasJastroch/ChaosManager/releases/tag/v1.0)** des Projekts.
-2.  Laden Sie die `.exe`-Datei unter **Assets** herunter.
-3.  Führen Sie die Datei aus (bestätigen Sie ggf. die Windows Defender Warnung wie oben beschrieben).
+#### Step 1: Prepare the AI Backend (Ollama)
 
-### 2. Nutzung über Quellcode (Für Entwickler)
+Before you can run the script, you need to install Ollama and download the required language model (`llama3:8b`):
 
-Wenn Sie die `.exe` vermeiden möchten oder den Quellcode selbst ausführen wollen:
-
-#### Schritt 1: Das KI-Backend vorbereiten (Ollama)
-
-Bevor Sie das Skript ausführen, müssen Sie Ollama installieren und das notwendige Sprachmodell (`llama3:8b`) herunterladen:
-
-1.  Stellen Sie sicher, dass **[Ollama für Windows](https://ollama.com/download/windows)** installiert ist und läuft.
-2.  Öffnen Sie **PowerShell** und führen Sie folgenden Befehl aus, um das Llama 3 Modell zu laden:
+1.  Make sure **[Ollama for Windows](https://ollama.com/download/windows)** is installed and running.
+2.  Open **PowerShell** and run the following command to pull the Llama 3 model:
 
     ```powershell
     ollama pull llama3:8b
     ```
 
-#### Schritt 2: Projekt klonen und ausführen
+#### Step 2: Clone and Run the Project
 
-1.  Klonen Sie das Repository lokal:
+1.  Clone the repository locally:
 
     ```bash
     git clone [https://github.com/JonasJastroch/ChaosManager.git](https://github.com/JonasJastroch/ChaosManager.git)
     cd ChaosManager
     ```
 
-2.  Stellen Sie sicher, dass Sie alle Python-Abhängigkeiten installiert haben (falls erforderlich, mittels `pip install -r requirements.txt`).
-3.  Führen Sie die Hauptdatei aus:
+2.  Make sure you have all Python dependencies installed (if necessary, via `pip install -r requirements.txt`).
+3.  Run the main file:
 
     ```bash
     python main.py
     ```
 
+### 2. Simple Use (.exe Binary)
+
+For the quickest setup, download the pre-compiled executable:
+
+1.  Go to the **[GitHub Releases](https://github.com/JonasJastroch/ChaosManager/releases/tag/v1.0)** of the project.
+2.  Download the `.exe` file under **Assets**.
+3.  Run the file (you may need to confirm the Windows Defender warning as described above).
+
 ---
 
 ## 📺 Demo Video
 
-Sehen Sie den Chaos Manager in Aktion:
+See the Chaos Manager in action:
 
 [https://www.youtube.com/watch?v=40O2LQ0ObOE](https://www.youtube.com/watch?v=40O2LQ0ObOE)
