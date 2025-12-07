@@ -2,100 +2,123 @@ import requests
 import json
 from pathlib import Path
 import os
-import time
 
 # --- Configuration ---
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3:8b"
 
 
-def get_file_structure_string(base_path):
+def get_all_files_list(base_path):
     """
-    Generiert eine lesbare Repräsentation der Dateistruktur,
-    rekursiv und filtert nicht benötigte Dateitypen.
+    Returns a list of all relative file paths (recursive),
+    filtering out ignored types.
     """
     base_path = Path(base_path)
-    file_count = 0
-    structure = []
+    file_list = []
 
-    # Ignoriert: Verknüpfungen, Backup-Dateien, temporäre Dateien
-    IGNORED_SUFFIXES = ['.lnk', '.url', '.vpp.bak', '.bak', '.tmp', '.ds_store']
+    # ÄNDERUNG: .lnk und .url entfernt! Sie werden jetzt mit sortiert.
+    IGNORED_SUFFIXES = ['.vpp.bak', '.bak', '.tmp', '.ds_store', '.ini']
 
-    # Durchsuche den Basis-Pfad und alle Unterordner rekursiv
     for item in base_path.rglob('*'):
+        # Sicherheitscheck: Manchmal haben Ordner Endungen, wir wollen nur Dateien
+        if item.is_file() and not item.name.startswith('.'):
+            is_ignored_type = item.suffix.lower() in IGNORED_SUFFIXES
+            if not is_ignored_type:
+                # Relative path
+                relative_path = str(item.relative_to(base_path))
+                file_list.append(relative_path)
 
-        is_ignored_type = item.suffix.lower() in IGNORED_SUFFIXES
-
-        # Nur Dateien, keine versteckten Dateien und keine ignorierten Endungen
-        if item.is_file() and not item.name.startswith('.') and not is_ignored_type:
-            # Relativer Pfad zur Basis
-            relative_path = str(item.relative_to(base_path))
-            structure.append(relative_path)
-            file_count += 1
-
-    if file_count == 0:
-        return "The folder and its subfolders are empty of files (or only contain ignored file types like .lnk)."
-
-    structure_str = "\n".join(structure)
-
-    return f"CURRENT FILES (TOTAL: {file_count}):\n{structure_str}"
+    return file_list
 
 
-def query_llama_for_sort(file_structure_str, user_prompt):
-    """Sends the file structure and user prompt to the Ollama API."""
+def query_llama_for_categories(all_files, user_prompt):
+    """
+    PHASE 1: THE ARCHITECT
+    """
+    sample_files = all_files[:500]
+    files_str = "\n".join(sample_files)
 
-    # NEU: System Prompt mit kritischer Anweisung zur Vollständigkeit
     system_prompt = (
-        "You are an intelligent file sorter. Your task is to propose an ideal, new folder "
-        "structure for the given files. NOTE: The files listed may include their full relative path "
-        "(e.g., 'Subfolder/file.pdf'). "
-        "Your proposed moves MUST use the FULL RELATIVE PATH as the source, "
-        "and ONLY a NEW FOLDER NAME as the destination. "
-        "The destination MUST be a top-level folder name within the root. "
-        "CRITICAL: YOU MUST INCLUDE EVERY SINGLE FILE LISTED IN YOUR PROPOSALS. DO NOT STOP GENERATING UNTIL THE LIST IS COMPLETE. "
-        "Output ONLY a simple, markdown-formatted list of proposed moves. Each item must be formatted as: "
-        "'[FULL_RELATIVE_PATH_TO_FILE] -> [PROPOSED_TOP_LEVEL_FOLDER_NAME]'. "
-        "Do not include any explanation, intro, or extra text. Only list files that need to be moved."
+        "You are a senior information architect. Your goal is to analyze a list of filenames "
+        "and create a clean, consistent set of top-level folders that covers ALL file types listed. "
+        "Create broad but logical categories (e.g. 'Documentation', 'Finance', 'Images', 'Code', 'System'). "
+        "Avoid creating too many folders (keep it between 5 and 15). "
+        "Output ONLY the list of folder names, separated by commas. Nothing else."
     )
 
     prompt = (
-        f"--- CURRENT FILES AND FOLDERS ---\n"
-        f"{file_structure_str}\n\n"
-        f"--- SORTING INSTRUCTION ---\n"
+        f"--- FILE LIST SAMPLE ---\n"
+        f"{files_str}\n\n"
+        f"--- USER GOAL ---\n"
         f"{user_prompt}\n\n"
-        f"Generate the proposed moves list:"
+        f"Based on the files above, define the perfect folder structure.\n"
+        f"Output ONLY the folder names separated by commas (e.g. Folder A, Folder B, Folder C):"
     )
 
-    # Ausgabe des vollständigen Prompts in der Konsole (Terminal)
-    print("=" * 80)
-    print("START LLAMA PROMPT FOR DEBUGGING")
-    print(prompt)
-    print("END LLAMA PROMPT FOR DEBUGGING")
-    print("=" * 80)
+    print("DEBUG: Asking Architect for Global Folder Structure...")
 
     data = {
         "model": MODEL_NAME,
         "prompt": prompt,
         "system": system_prompt,
         "stream": False,
-        "options": {
-            # NEU: Temperatur leicht erhöht, um die Generierung zu fördern
-            "temperature": 0.2,
-            # NEU: Maximale Output-Tokens erhöht (Standard oft 128)
-            "num_predict": 1024
-        }
+        "options": {"temperature": 0.2, "num_predict": 256}
     }
 
     try:
         response = requests.post(OLLAMA_API_URL, json=data, timeout=120)
         response.raise_for_status()
+        raw_text = response.json().get('response', '').strip()
+        raw_text = raw_text.replace('[', '').replace(']', '').replace('\n', ',')
+        categories = [cat.strip() for cat in raw_text.split(',') if cat.strip()]
+        return categories
+    except Exception as e:
+        print(f"Architect Error: {e}")
+        return []
 
-        result = response.json()
-        return result.get('response', '').strip()
 
-    except requests.exceptions.ConnectionError:
-        return "ERROR: Could not connect to Ollama API. Is Ollama running and the port 11434 open?"
-    except requests.exceptions.Timeout:
-        return "ERROR: Ollama API request timed out."
-    except requests.exceptions.RequestException as e:
-        return f"ERROR: API request failed: {e}"
+def query_llama_for_chunk(file_chunk, user_prompt, defined_categories):
+    """
+    PHASE 2: THE WORKER
+    """
+    files_str = "\n".join(file_chunk)
+
+    if defined_categories:
+        cat_str = ", ".join(defined_categories)
+        constraint = (
+            f"--- ALLOWED DESTINATION FOLDERS ---\n"
+            f"You must ONLY use folders from this list: [{cat_str}].\n"
+            f"Do not invent new folder names. Pick the best fit from the list for each file.\n"
+        )
+    else:
+        constraint = ""
+
+    system_prompt = (
+        "You are a file sorting robot. You must assign every single file to one of the provided destination folders. "
+        "Strictly follow the format: '[FILE_PATH] -> [FOLDER_NAME]'. "
+        "Do not include any intro or outro text."
+    )
+
+    prompt = (
+        f"--- FILES TO SORT ---\n"
+        f"{files_str}\n\n"
+        f"{constraint}\n"
+        f"--- INSTRUCTION ---\n"
+        f"{user_prompt}\n"
+        f"CRITICAL: Output a sorting line for EVERY file listed. Format: [File] -> [Folder]\n"
+    )
+
+    data = {
+        "model": MODEL_NAME,
+        "prompt": prompt,
+        "system": system_prompt,
+        "stream": False,
+        "options": {"temperature": 0.1, "num_predict": 1024}
+    }
+
+    try:
+        response = requests.post(OLLAMA_API_URL, json=data, timeout=120)
+        response.raise_for_status()
+        return response.json().get('response', '').strip()
+    except Exception as e:
+        return f"ERROR: {e}"
