@@ -13,7 +13,7 @@ class ChaosManagerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Chaos Manager - MiniHackathon 3.0 (LLaMA) - Backup Edition")
-        self.root.geometry("1100x700")
+        self.root.geometry("1100x700")  # Etwas breiter für die neuen Buttons
         self.root.configure(bg="#1e1e2e")
 
         # --- Styles ---
@@ -23,11 +23,12 @@ class ChaosManagerApp:
         bg_color = "#1e1e2e"
         fg_color = "#cdd6f4"
         accent_color = "#89b4fa"
-        button_bg = "#313244"
+        button_bg = "#313244"  # button_bg korrigiert
 
         style.configure("TLabel", background=bg_color, foreground=fg_color, font=("Segoe UI", 11))
         style.configure("Header.TLabel", background=bg_color, foreground=accent_color, font=("Segoe UI", 20, "bold"))
-        style.configure("TButton", background=button_color, foreground="#ffffff", borderwidth=0, font=("Segoe UI", 10))
+        # button_bg korrigiert
+        style.configure("TButton", background=button_bg, foreground="#ffffff", borderwidth=0, font=("Segoe UI", 10))
         style.map("TButton", background=[('active', accent_color)])
         style.configure("TFrame", background=bg_color)
         style.configure("TLabelframe", background=bg_color, foreground=fg_color)
@@ -37,18 +38,17 @@ class ChaosManagerApp:
 
         # --- Variablen ---
         self.selected_folder = tk.StringVar()
-        # NEU: Wir benötigen KEINE StringVar für den Prompt mehr, da wir Text verwenden.
-        self.default_prompt = "DU MUSST JEDE EINZELNE DATEI im Ordner, ohne Ausnahme, in einen neuen, passenden TOP-LEVEL Ordner (z.B. 'Dokumente', 'Projekte', 'Finanzen') verschieben. Finde für jede Datei eine sinnvolle Kategorie. Gib alle Vorschläge ausschließlich in der geforderten Listenform zurück."
+        # NEU: Zwingender Standard-Prompt
+        self.default_prompt = self.default_prompt = "DU MUSST JEDE EINZELNE DATEI im Ordner, ohne Ausnahme, in einen neuen, passenden TOP-LEVEL Ordner verschieben. Finde für jede Datei eine sinnvolle Kategorie. CRITICAL: Überprüfe am Ende, dass JEDE Datei, die in der Eingabe unter 'CURRENT FILES' gelistet ist, eine entsprechende Zeile in deinen Vorschlägen hat. Gib alle Vorschläge ausschließlich in der geforderten Listenform zurück."
+        # self.llama_prompt wurde entfernt und durch die Text-Widget-Referenz ersetzt
         self.log_text = None
         self.preview_data = []
 
         # Variablen für Backup/Restore
         self.backup_path = None
-        self.should_backup = tk.BooleanVar(value=True)
+        self.should_backup = tk.BooleanVar(value=True)  # Checkbox-Zustand: Standardmäßig an
         self.btn_restore = None
-
-        # Text Widget Referenz
-        self.entry_prompt = None
+        self.entry_prompt = None  # Referenz zum Text-Widget
 
         # Progress Bar
         self.progress_bar = None
@@ -180,7 +180,7 @@ class ChaosManagerApp:
         # NEU: Auslesen des Text-Widgets
         user_prompt = self.entry_prompt.get("1.0", "end-1c").strip()
 
-        # Fallback auf den intelligenten Default-Prompt, falls das Feld leer ist
+        # Fallback auf den intelligenten Default-Prompt
         if not user_prompt:
             user_prompt = self.default_prompt
 
@@ -259,7 +259,8 @@ class ChaosManagerApp:
                                 })
 
                                 # --- NEUE FORMATIERTE AUSGABE ---
-                                source_display = relative_source_path[:50].ljust(50)
+                                # Breite 65 für bessere Übersicht
+                                source_display = relative_source_path[:65].ljust(65)
                                 formatted_message = f"{source_display} -> {dest_folder_name}"
 
                                 valid_lines_count += 1
@@ -360,7 +361,7 @@ class ChaosManagerApp:
 
         self.preview_data = []
 
-    # NEU: Methode zum Kopieren der Dateien (Backup)
+    # Methode zum Kopieren der Dateien (Backup)
     def run_backup(self):
         source_dir = self.selected_folder.get()
         if not source_dir:

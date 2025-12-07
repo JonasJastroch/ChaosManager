@@ -44,6 +44,7 @@ def get_file_structure_string(base_path):
 def query_llama_for_sort(file_structure_str, user_prompt):
     """Sends the file structure and user prompt to the Ollama API."""
 
+    # NEU: System Prompt mit kritischer Anweisung zur Vollständigkeit
     system_prompt = (
         "You are an intelligent file sorter. Your task is to propose an ideal, new folder "
         "structure for the given files. NOTE: The files listed may include their full relative path "
@@ -51,6 +52,7 @@ def query_llama_for_sort(file_structure_str, user_prompt):
         "Your proposed moves MUST use the FULL RELATIVE PATH as the source, "
         "and ONLY a NEW FOLDER NAME as the destination. "
         "The destination MUST be a top-level folder name within the root. "
+        "CRITICAL: YOU MUST INCLUDE EVERY SINGLE FILE LISTED IN YOUR PROPOSALS. DO NOT STOP GENERATING UNTIL THE LIST IS COMPLETE. "
         "Output ONLY a simple, markdown-formatted list of proposed moves. Each item must be formatted as: "
         "'[FULL_RELATIVE_PATH_TO_FILE] -> [PROPOSED_TOP_LEVEL_FOLDER_NAME]'. "
         "Do not include any explanation, intro, or extra text. Only list files that need to be moved."
@@ -64,13 +66,23 @@ def query_llama_for_sort(file_structure_str, user_prompt):
         f"Generate the proposed moves list:"
     )
 
+    # Ausgabe des vollständigen Prompts in der Konsole (Terminal)
+    print("=" * 80)
+    print("START LLAMA PROMPT FOR DEBUGGING")
+    print(prompt)
+    print("END LLAMA PROMPT FOR DEBUGGING")
+    print("=" * 80)
+
     data = {
         "model": MODEL_NAME,
         "prompt": prompt,
         "system": system_prompt,
         "stream": False,
         "options": {
-            "temperature": 0.2
+            # NEU: Temperatur leicht erhöht, um die Generierung zu fördern
+            "temperature": 0.2,
+            # NEU: Maximale Output-Tokens erhöht (Standard oft 128)
+            "num_predict": 1024
         }
     }
 
