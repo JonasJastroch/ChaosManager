@@ -6,7 +6,6 @@
   <component name="ChangeListManager">
     <list default="true" id="0554e123-7ded-42ad-b7c7-329a5575869d" name="Changes" comment="init new branch">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/llama_sorter.py" beforeDir="false" afterPath="$PROJECT_DIR$/llama_sorter.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -100,16 +99,5 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="init new branch" />
     <option name="LAST_COMMIT_MESSAGE" value="init new branch" />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/main.py</url>
-          <line>474</line>
-          <option name="timeStamp" value="1" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
   </component>
 </project>
